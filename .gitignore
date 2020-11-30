@@ -3,17 +3,18 @@
 .externalNativeBuild
 .project
 .gradle
-.idea
 .mtj.tmp
 .vscode
 .settings
+.cxx
+
+/.idea
 
 local.properties
 maven-repository
 mvn-clone
 build
 captures
-objectbox-models
 gen
 out
 target

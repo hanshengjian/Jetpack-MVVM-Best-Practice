@@ -31,6 +31,7 @@ import com.kunminx.puremusic.R;
 import com.kunminx.puremusic.databinding.FragmentPlayerBinding;
 import com.kunminx.puremusic.player.PlayerManager;
 import com.kunminx.puremusic.ui.callback.SharedViewModel;
+import com.kunminx.puremusic.ui.helper.DrawerCoordinateHelper;
 import com.kunminx.puremusic.ui.state.PlayerViewModel;
 import com.kunminx.puremusic.ui.view.PlayerSlideListener;
 import com.sothree.slidinguppanel.SlidingUpPanelLayout;
@@ -42,13 +43,18 @@ import net.steamcrafted.materialiconlib.MaterialDrawableBuilder;
  */
 public class PlayerFragment extends BaseFragment {
 
-    private PlayerViewModel mPlayerViewModel;
-    private SharedViewModel mSharedViewModel;
+    //TODO tip 1：每个页面都要单独配备一个 state-ViewModel，职责仅限于 "状态托管和恢复"，
+    //callback-ViewModel 则是用于在 "跨页面通信" 的场景下，承担 "唯一可信源"，
+
+    //如果这样说还不理解的话，详见 https://xiaozhuanlan.com/topic/6257931840
+
+    private PlayerViewModel mPlayerState;
+    private SharedViewModel mPageCallback;
 
     @Override
     protected void initViewModel() {
-        mPlayerViewModel = getFragmentViewModel(PlayerViewModel.class);
-        mSharedViewModel = getAppViewModelProvider().get(SharedViewModel.class);
+        mPlayerState = getFragmentScopeViewModel(PlayerViewModel.class);
+        mPageCallback = getApplicationScopeViewModel(SharedViewModel.class);
     }
 
     @Override
@@ -57,12 +63,12 @@ public class PlayerFragment extends BaseFragment {
         //TODO tip: DataBinding 严格模式：
         // 将 DataBinding 实例限制于 base 页面中，默认不向子类暴露，
         // 通过这样的方式，来彻底解决 视图调用的一致性问题，
-        // 如此，视图刷新的安全性将和基于函数式编程的 Jetpack Compose 持平。
+        // 如此，视图调用的安全性将和基于函数式编程思想的 Jetpack Compose 持平。
         // 而 DataBindingConfig 就是在这样的背景下，用于为 base 页面中的 DataBinding 提供绑定项。
 
         // 如果这样说还不理解的话，详见 https://xiaozhuanlan.com/topic/9816742350 和 https://xiaozhuanlan.com/topic/2356748910
 
-        return new DataBindingConfig(R.layout.fragment_player, BR.vm, mPlayerViewModel)
+        return new DataBindingConfig(R.layout.fragment_player, BR.vm, mPlayerState)
                 .addBindingParam(BR.click, new ClickProxy())
                 .addBindingParam(BR.event, new EventHandler());
     }
@@ -78,7 +84,7 @@ public class PlayerFragment extends BaseFragment {
         // 也即，在 fragment 的场景下，请使用 getViewLifeCycleOwner 来作为 liveData 的观察者。
         // Activity 则不用改变。
 
-        mSharedViewModel.timeToAddSlideListener.observe(getViewLifecycleOwner(), aBoolean -> {
+        mPageCallback.isToAddSlideListener().observeInFragment(this, aBoolean -> {
             if (view.getParent().getParent() instanceof SlidingUpPanelLayout) {
                 SlidingUpPanelLayout sliding = (SlidingUpPanelLayout) view.getParent().getParent();
                 sliding.addPanelSlideListener(new PlayerSlideListener((FragmentPlayerBinding) getBinding(), sliding));
@@ -93,11 +99,11 @@ public class PlayerFragment extends BaseFragment {
                                                     SlidingUpPanelLayout.PanelState panelState1) {
 
                         if (panelState1 == SlidingUpPanelLayout.PanelState.EXPANDED) {
-                            SharedViewModel.TAG_OF_SECONDARY_PAGES.add(this.getClass().getSimpleName());
+                            DrawerCoordinateHelper.TAG_OF_SECONDARY_PAGES.add(this.getClass().getSimpleName());
                         } else {
-                            SharedViewModel.TAG_OF_SECONDARY_PAGES.remove(this.getClass().getSimpleName());
+                            DrawerCoordinateHelper.TAG_OF_SECONDARY_PAGES.remove(this.getClass().getSimpleName());
                         }
-                        SharedViewModel.ENABLE_SWIPE_DRAWER.setValue(SharedViewModel.TAG_OF_SECONDARY_PAGES.size() == 0);
+                        DrawerCoordinateHelper.getInstance().requestToUpdateDrawerMode();
                     }
                 });
             }
@@ -108,9 +114,9 @@ public class PlayerFragment extends BaseFragment {
             // TODO tip 3：同 tip 2.
 
             // 切歌时，音乐的标题、作者、封面 状态的改变
-            mPlayerViewModel.title.set(changeMusic.getTitle());
-            mPlayerViewModel.artist.set(changeMusic.getSummary());
-            mPlayerViewModel.coverImg.set(changeMusic.getImg());
+            mPlayerState.title.set(changeMusic.getTitle());
+            mPlayerState.artist.set(changeMusic.getSummary());
+            mPlayerState.coverImg.set(changeMusic.getImg());
         });
 
         PlayerManager.getInstance().getPlayingMusicLiveData().observe(getViewLifecycleOwner(), playingMusic -> {
@@ -118,8 +124,8 @@ public class PlayerFragment extends BaseFragment {
             // TODO tip 4：同 tip 2.
 
             // 播放进度 状态的改变
-            mPlayerViewModel.maxSeekDuration.set(playingMusic.getDuration());
-            mPlayerViewModel.currentSeekPosition.set(playingMusic.getPlayerPosition());
+            mPlayerState.maxSeekDuration.set(playingMusic.getDuration());
+            mPlayerState.currentSeekPosition.set(playingMusic.getPlayerPosition());
         });
 
         PlayerManager.getInstance().getPauseLiveData().observe(getViewLifecycleOwner(), aBoolean -> {
@@ -133,19 +139,19 @@ public class PlayerFragment extends BaseFragment {
             // 如果这样说还不理解的话，详见 https://xiaozhuanlan.com/topic/0168753249
 
             // 播放按钮 状态的改变
-            mPlayerViewModel.isPlaying.set(!aBoolean);
+            mPlayerState.isPlaying.set(!aBoolean);
         });
 
         PlayerManager.getInstance().getPlayModeLiveData().observe(getViewLifecycleOwner(), anEnum -> {
             int tip;
             if (anEnum == PlayingInfoManager.RepeatMode.LIST_LOOP) {
-                mPlayerViewModel.playModeIcon.set(MaterialDrawableBuilder.IconValue.REPEAT);
+                mPlayerState.playModeIcon.set(MaterialDrawableBuilder.IconValue.REPEAT);
                 tip = R.string.play_repeat;
             } else if (anEnum == PlayingInfoManager.RepeatMode.ONE_LOOP) {
-                mPlayerViewModel.playModeIcon.set(MaterialDrawableBuilder.IconValue.REPEAT_ONCE);
+                mPlayerState.playModeIcon.set(MaterialDrawableBuilder.IconValue.REPEAT_ONCE);
                 tip = R.string.play_repeat_once;
             } else {
-                mPlayerViewModel.playModeIcon.set(MaterialDrawableBuilder.IconValue.SHUFFLE);
+                mPlayerState.playModeIcon.set(MaterialDrawableBuilder.IconValue.SHUFFLE);
                 tip = R.string.play_shuffle;
             }
             if (view.getParent().getParent() instanceof SlidingUpPanelLayout) {
@@ -156,7 +162,7 @@ public class PlayerFragment extends BaseFragment {
             }
         });
 
-        mSharedViewModel.closeSlidePanelIfExpanded.observe(getViewLifecycleOwner(), aBoolean -> {
+        mPageCallback.isToCloseSlidePanelIfExpanded().observeInFragment(this, aBoolean -> {
 
             // 按下返回键，如果此时 slide 面板是展开的，那么只对面板进行 slide down
 
@@ -180,13 +186,13 @@ public class PlayerFragment extends BaseFragment {
 
                     // TODO: yes:
 
-                    mSharedViewModel.activityCanBeClosedDirectly.setValue(true);
+                    mPageCallback.requestToCloseActivityIfAllowed(true);
 
                     // TODO: do not:
                     // mActivity.finish();
                 }
             } else {
-                mSharedViewModel.activityCanBeClosedDirectly.setValue(true);
+                mPageCallback.requestToCloseActivityIfAllowed(true);
             }
         });
 
@@ -220,7 +226,7 @@ public class PlayerFragment extends BaseFragment {
         }
 
         public void slideDown() {
-            mSharedViewModel.closeSlidePanelIfExpanded.setValue(true);
+            mPageCallback.requestToCloseSlidePanelIfExpanded(true);
         }
 
         public void more() {

@@ -44,7 +44,7 @@ public class PlaylistAdapter extends SimpleDataBindingAdapter<TestAlbum.TestMusi
     protected void onBindItem(AdapterPlayItemBinding binding, TestAlbum.TestMusic item, RecyclerView.ViewHolder holder) {
         binding.setAlbum(item);
         int currentIndex = PlayerManager.getInstance().getAlbumIndex();
-        binding.ivPlayStatus.setColor(currentIndex == holder.getAdapterPosition()
-                ? binding.getRoot().getContext().getResources().getColor(R.color.gray) : Color.TRANSPARENT);
+        binding.ivPlayStatus.setColor(currentIndex == holder.getAbsoluteAdapterPosition()
+                ? binding.getRoot().getContext().getColor(R.color.gray) : Color.TRANSPARENT);
     }
 }
